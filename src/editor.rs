@@ -4,6 +4,9 @@ use std::io::Error;
 mod terminal;
 use terminal::{Terminal, Coordinates};
 
+const EDITOR_NAME: &str = "Ecto";
+const EDITOR_VERSION: &str = "0.0";
+
 
 pub struct Editor {
     should_quit: bool,
@@ -22,7 +25,6 @@ impl Editor {
         result.unwrap();
     }
 
-
     fn draw_rows() -> Result<(), Error> {
         // Assumes the cursor is in the top left already
         let Coordinates{y: height, ..} = Terminal::size()?;
@@ -31,6 +33,18 @@ impl Editor {
             Terminal::clear_line()?;
             Terminal::write("~")?;
         }
+        Ok(())
+    }
+
+    fn draw_welcome_message() -> Result<(), Error> {
+        let Coordinates { x: width, y: height } = Terminal::size()?;
+        let welcome_strlen = u16::try_from(EDITOR_NAME.len()).unwrap();
+        let version_strlen = u16::try_from(EDITOR_VERSION.len()).unwrap();
+        // TODO check that these don't go past the end of the window
+        Terminal::move_cursor_to(Coordinates { x: (width - welcome_strlen)/2 - 1, y: height/3 })?;
+        Terminal::write(EDITOR_NAME)?;
+        Terminal::move_cursor_to(Coordinates { x: (width - version_strlen)/2 - 1, y:(height/3) + 1 })?;
+        Terminal::write(format!("v{EDITOR_VERSION}"))?;
         Ok(())
     }
 
@@ -68,6 +82,7 @@ impl Editor {
             Terminal::write("Goodbye.\r\n")?;
         } else {
             Self::draw_rows()?;
+            Self::draw_welcome_message()?;
             Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
         }
         Terminal::show_cursor()?;
