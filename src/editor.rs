@@ -9,8 +9,8 @@ use std::io::Error;
 mod terminal;
 use terminal::{Terminal, Coordinates};
 
-const EDITOR_NAME: &str = "Ecto";
-const EDITOR_VERSION: &str = "0.0";
+mod view;
+use view::View;
 
 
 pub struct Editor {
@@ -29,32 +29,6 @@ impl Editor {
         let result = self.repl();
         Terminal::terminate().unwrap();
         result.unwrap();
-    }
-
-    fn draw_rows() -> Result<(), Error> {
-        let Coordinates{y: height, ..} = Terminal::size()?;
-        for n in 0..height {
-            Terminal::move_cursor_to(Coordinates{x: 0, y: n})?;
-            Terminal::clear_line()?;
-            Terminal::write("~")?;
-        }
-        Ok(())
-    }
-
-    fn draw_welcome_message() -> Result<(), Error> {
-        let Coordinates { x: width, y: height } = Terminal::size()?;
-        let welcome_strlen = EDITOR_NAME.len();
-        let version_strlen = EDITOR_VERSION.len();
-        // Allow this integer division because we don't care if the welcome message is _exactly
-        // centered on the screen.
-        // TODO we still need to check that this won't overflow the screen
-        #[allow(clippy::integer_division)]
-        Terminal::move_cursor_to(Coordinates { x: (width.saturating_sub(welcome_strlen))/2, y: height/3 })?;
-        Terminal::write(EDITOR_NAME)?;
-        #[allow(clippy::integer_division)]
-        Terminal::move_cursor_to(Coordinates { x: (width.saturating_sub(version_strlen))/2, y:(height/3).saturating_add(1) })?;
-        Terminal::write(format!("v{EDITOR_VERSION}"))?;
-        Ok(())
     }
 
     fn repl(&mut self) -> Result<(), Error> {
@@ -144,8 +118,7 @@ impl Editor {
             Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
             Terminal::write("Goodbye.\r\n")?;
         } else {
-            Self::draw_rows()?;
-            Self::draw_welcome_message()?;
+            View::render()?;
             Terminal::move_cursor_to(self.caret_position)?;
         }
         Terminal::show_cursor()?;
