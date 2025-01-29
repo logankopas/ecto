@@ -13,19 +13,19 @@ mod view;
 use view::View;
 
 
+#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
-    caret_position: Coordinates
+    caret_position: Coordinates,
+    view: View
 }
 
 impl Editor {
-    pub const fn default() -> Self {
-        Self { should_quit: false, caret_position: Coordinates{ x: 0, y: 0 } }
-    }
 
     pub fn run(&mut self){
         Terminal::initialize().unwrap();
         Terminal::flush_queue().unwrap();
+        View::initialize().unwrap();
         let result = self.repl();
         Terminal::terminate().unwrap();
         result.unwrap();
@@ -118,7 +118,7 @@ impl Editor {
             Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
             Terminal::write("Goodbye.\r\n")?;
         } else {
-            View::render()?;
+            self.view.render()?;
             Terminal::move_cursor_to(self.caret_position)?;
         }
         Terminal::show_cursor()?;

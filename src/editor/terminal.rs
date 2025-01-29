@@ -5,7 +5,7 @@ use crossterm::style::Print;
 use std::io::{stdout, Error, Write};
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct Coordinates {
     // Top Left is (0, 0), values increase as you 
     // go down or right

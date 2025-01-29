@@ -1,24 +1,44 @@
 use super::terminal::{Coordinates, Terminal};
 use std::io::Error;
 
+mod buffer;
+use buffer::Buffer;
+
 const EDITOR_NAME: &str = "Ecto";
 const EDITOR_VERSION: &str = "0.0";
 
 
-pub struct View {}
+#[derive(Default)]
+pub struct View {
+    buffer: Buffer
+}
 
 impl View {
-    pub fn render() -> Result<(), Error>{
+    pub fn render(&self) -> Result<(), Error>{
+        let Coordinates { y: height, .. } = Terminal::size()?; 
+        Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
+
+        for current_row in 0..height {
+            if let Some(line) = self.buffer.data.get(current_row) {
+                Terminal::clear_line()?;
+                Terminal::write(line)?;
+                Terminal::write("\r\n")?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn initialize() -> Result<(), Error>{
         View::draw_empty_screen()?;
         View::draw_welcome_message()?;
-        View::hello_world()?;
         Ok(())
+
     }
 
     fn draw_welcome_message() -> Result<(), Error> {
         let Coordinates { x: width, y: height } = Terminal::size()?;
         let welcome_strlen = EDITOR_NAME.len();
-        let version_strlen = EDITOR_VERSION.len();
+        let version_strlen = format!("v{EDITOR_VERSION}").len();
         // Allow this integer division because we don't care if the welcome message is _exactly
         // centered on the screen.
         // TODO we still need to check that this won't overflow the screen
@@ -39,12 +59,6 @@ impl View {
             Terminal::write("~")?;
         }
         Ok(())
-    }
-
-    fn hello_world() -> Result<(), Error> {
-        Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
-        Terminal::clear_line()?;
-        Terminal::write("Hello, friends!")
     }
 }
 
