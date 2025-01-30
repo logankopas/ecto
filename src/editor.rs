@@ -1,10 +1,10 @@
 use core::cmp::min;
 use crossterm::event::{
     read, 
-    Event::{self, Key}, 
+    Event, 
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers
 };
-use std::io::Error;
+use std::{env, io::Error};
 
 mod terminal;
 use terminal::{Terminal, Coordinates};
@@ -23,10 +23,21 @@ pub struct Editor {
 impl Editor {
 
     pub fn run(&mut self){
+        // Initialize the terminal
         Terminal::initialize().unwrap();
         Terminal::flush_queue().unwrap();
-        View::initialize().unwrap();
+
+        // Initialize the view
+        let args: Vec<String> = env::args().collect();
+        if let Some(file_arg) = args.get(1) {
+            self.view.load(file_arg);
+        }
+        self.view.initialize().unwrap();
+
+        // run the text editor
         let result = self.repl();
+
+        // Teardown
         Terminal::terminate().unwrap();
         result.unwrap();
     }
@@ -45,17 +56,17 @@ impl Editor {
     }
 
     fn evaluate_event(&mut self, event: &Event) -> Result<(), Error> {
-        if let Key(KeyEvent {
-            code, 
-            modifiers, 
-            kind: KeyEventKind::Press,
-            ..
-        }) = event
-        {
-            match code {
-                KeyCode::Char('q') if *modifiers == KeyModifiers::CONTROL => {
+        match &event {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match(code, modifiers) {
+                (&KeyCode::Char('q'), &KeyModifiers::CONTROL) => {
                     self.should_quit = true;
                 }
+                (
                 KeyCode::Up
                     | KeyCode::Down
                     | KeyCode::Left
@@ -63,11 +74,27 @@ impl Editor {
                     | KeyCode::PageDown
                     | KeyCode::PageUp
                     | KeyCode::Home
-                    | KeyCode::End => {
-                        self.handle_move_caret(*code)?;
+                    | KeyCode::End,
+                    _
+                ) => {
+                    self.handle_move_caret(*code)?;
+
                 }
-                _ => (),
+                _ => {}
+            },
+            Event::Resize(width_u16, height_u16) => {
+                // clippy::as_conversions: Will run into problems for rare edge case systems where usize < u16
+                #[allow(clippy::as_conversions)]
+                let height = *height_u16 as usize;
+                // clippy::as_conversions: Will run into problems for rare edge case systems where usize < u16
+                #[allow(clippy::as_conversions)]
+                let width = *width_u16 as usize;
+                self.view.resize(Coordinates {
+                    x: width,
+                    y: height,
+                });
             }
+            _ => {}
         }
         Ok(())
     }
@@ -111,14 +138,14 @@ impl Editor {
         Ok(())
     }
 
-    fn refresh_screen(&self) -> Result<(), Error> {
+    fn refresh_screen(&mut self) -> Result<(), Error> {
         Terminal::hide_cursor()?;
         if self.should_quit {
             Terminal::clear_screen()?;
             Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
             Terminal::write("Goodbye.\r\n")?;
         } else {
-            self.view.render()?;
+            self.view.render_full()?;
             Terminal::move_cursor_to(self.caret_position)?;
         }
         Terminal::show_cursor()?;

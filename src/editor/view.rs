@@ -8,55 +8,108 @@ const EDITOR_NAME: &str = "Ecto";
 const EDITOR_VERSION: &str = "0.0";
 
 
-#[derive(Default)]
 pub struct View {
-    buffer: Buffer
+    buffer: Buffer,
+    needs_redraw: bool,
+    size: Coordinates
+}
+
+impl Default for View {
+    fn default() -> Self {
+        Self {
+            buffer: Buffer::default(),
+            needs_redraw: true,
+            size: Terminal::size().unwrap_or_default(),
+        }
+    }
 }
 
 impl View {
-    pub fn render(&self) -> Result<(), Error>{
-        let Coordinates { y: height, .. } = Terminal::size()?; 
-        Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
+    pub fn initialize(&mut self) -> Result<(), Error>{
+        self.draw_empty_screen()?;
+        if self.buffer.is_empty() {
+            self.draw_welcome_message()?;
+        } else {
+            self.render_full()?;
+        }
+        Ok(())
+
+    }
+
+    pub fn render_full(&mut self) -> Result<(), Error>{
+        if !self.needs_redraw {
+            return Ok(())
+        }
+        let Coordinates { x:width, y: height} = self.size; 
+        if height == 0 || width == 0 {
+            return Ok(())
+        }
+
+        if self.buffer.is_empty() {
+            self.draw_empty_screen()?;
+            self.draw_welcome_message()?;
+            self.needs_redraw = false;
+            return Ok(())
+        }
 
         for current_row in 0..height {
             if let Some(line) = self.buffer.data.get(current_row) {
-                Terminal::clear_line()?;
-                Terminal::write(line)?;
-                Terminal::write("\r\n")?;
+                let truncated_line = if line.len() >= width {
+                    &line[0..width]
+                } else {
+                    line
+                };
+                Self::render_line(current_row, truncated_line)?;
             }
         }
+        self.needs_redraw = false;
         Ok(())
     }
 
-    pub fn initialize() -> Result<(), Error>{
-        View::draw_empty_screen()?;
-        View::draw_welcome_message()?;
+    pub fn render_line(at: usize, text: &str) -> Result<(), Error> {
+        Terminal::move_cursor_to(Coordinates {x: 0, y: at})?;
+        Terminal::clear_line()?;
+        Terminal::write(text)?;
         Ok(())
-
     }
 
-    fn draw_welcome_message() -> Result<(), Error> {
-        let Coordinates { x: width, y: height } = Terminal::size()?;
+    pub fn load(&mut self, filename: &str) {
+        if let Ok(buffer) = Buffer::load(filename) {
+            self.buffer = buffer;
+            self.needs_redraw = true;
+        }
+    }
+
+    pub fn resize(&mut self, to: Coordinates) {
+        self.size = to;
+        self.needs_redraw = true;
+    }
+
+    fn draw_welcome_message(&self) -> Result<(), Error> {
+        // TODO handle the case where the message is smaller than the width
+        let Coordinates { x: width, y: height } = self.size;
         let welcome_strlen = EDITOR_NAME.len();
-        let version_strlen = format!("v{EDITOR_VERSION}").len();
         // Allow this integer division because we don't care if the welcome message is _exactly
         // centered on the screen.
-        // TODO we still need to check that this won't overflow the screen
         #[allow(clippy::integer_division)]
-        Terminal::move_cursor_to(Coordinates { x: (width.saturating_sub(welcome_strlen))/2, y: height/3 })?;
-        Terminal::write(EDITOR_NAME)?;
+        let editor_line = height / 3;
+        let version_line = editor_line.saturating_add(1);
         #[allow(clippy::integer_division)]
-        Terminal::move_cursor_to(Coordinates { x: (width.saturating_sub(version_strlen))/2, y:(height/3).saturating_add(1) })?;
-        Terminal::write(&format!("v{EDITOR_VERSION}"))?;
+        let padding_count = (width.saturating_sub(welcome_strlen) / 2).saturating_sub(1);
+
+        // add padding to strings and draw
+        let padding = " ".repeat(padding_count);
+        let editor_text = &format!("~{padding}{EDITOR_NAME}");
+        Self::render_line(editor_line, editor_text)?;
+        let version_text = &format!("~{padding}v{EDITOR_VERSION}");
+        Self::render_line(version_line, version_text)?;
         Ok(())
     }
 
-    fn draw_empty_screen() -> Result<(), Error> {
-        let Coordinates{y: height, ..} = Terminal::size()?;
+    fn draw_empty_screen(&self) -> Result<(), Error> {
+        let Coordinates{y: height, ..} = self.size;
         for n in 0..height {
-            Terminal::move_cursor_to(Coordinates{x: 0, y: n})?;
-            Terminal::clear_line()?;
-            Terminal::write("~")?;
+            Self::render_line(n, "~")?;
         }
         Ok(())
     }
