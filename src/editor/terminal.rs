@@ -1,13 +1,16 @@
 use crossterm::cursor::{MoveTo, Show, Hide};
 use crossterm::{queue, Command};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, size, Clear, ClearType,
+    EnterAlternateScreen, LeaveAlternateScreen
+};
 use crossterm::style::Print;
 use std::io::{stdout, Error, Write};
 
 
 #[derive(Copy, Clone, Default)]
 pub struct Coordinates {
-    // Top Left is (0, 0), values increase as you 
+    // Top Left is (0, 0), values increase as you
     // go down or right
     pub x: usize,
     pub y: usize
@@ -26,6 +29,7 @@ impl Terminal {
         // initialization state: screen has been cleared, cursor moved
         // to the top left position, and the queue has been flushed.
         enable_raw_mode()?;
+        Self::enter_alternate_screen()?;
         Self::clear_screen()?;
         Self::move_cursor_to(Coordinates { x: 0, y: 0 })?;
         Self::flush_queue()?;
@@ -33,12 +37,20 @@ impl Terminal {
     }
 
     pub fn terminate() -> Result<(), Error> {
+        Self::leave_alternate_screen()?;
+        Self::show_cursor()?;
+        Self::flush_queue()?;
         disable_raw_mode()?;
         Ok(())
     }
 
-    pub fn hide_cursor() -> Result<(), Error> {
-        Self::queue_command(Hide)?;
+    pub fn enter_alternate_screen() -> Result<(), Error> {
+        Self::queue_command(EnterAlternateScreen)?;
+        Ok(())
+    }
+
+    pub fn leave_alternate_screen() -> Result<(), Error> {
+        Self::queue_command(LeaveAlternateScreen)?;
         Ok(())
     }
 
@@ -47,8 +59,21 @@ impl Terminal {
         Ok(())
     }
 
+    pub fn hide_cursor() -> Result<(), Error> {
+        Self::queue_command(Hide)?;
+        Ok(())
+    }
+
+
     pub fn clear_screen() -> Result<(), Error> {
         Self::queue_command(Clear(ClearType::All))?;
+        Ok(())
+    }
+
+    pub fn write_line(row: usize, line_text: &str) -> Result<(), Error> {
+        Self::move_cursor_to(Coordinates {x: 0, y: row})?;
+        Self::clear_line()?;
+        Self::write(line_text)?;
         Ok(())
     }
 

@@ -1,10 +1,13 @@
 use core::cmp::min;
 use crossterm::event::{
-    read, 
-    Event, 
+    read,
+    Event,
     KeyCode, KeyEvent, KeyEventKind, KeyModifiers
 };
-use std::{env, io::Error};
+use std::{
+    env, io::Error,
+    panic::take_hook, panic::set_hook
+};
 
 mod terminal;
 use terminal::{Terminal, Coordinates};
@@ -13,7 +16,6 @@ mod view;
 use view::View;
 
 
-#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     caret_position: Coordinates,
@@ -21,18 +23,33 @@ pub struct Editor {
 }
 
 impl Editor {
+    pub fn new() -> Result<Self, Error> {
+        // Handle panics
+        let current_hook = take_hook();
+        set_hook(Box::new(move |panic_info| {
+            let _ = Terminal::terminate();
+            current_hook(panic_info);
+        }));
 
-    pub fn run(&mut self){
         // Initialize the terminal
-        Terminal::initialize().unwrap();
-        Terminal::flush_queue().unwrap();
+        Terminal::initialize()?;
 
         // Initialize the view
+        let mut view = View::default();
         let args: Vec<String> = env::args().collect();
         if let Some(file_arg) = args.get(1) {
-            self.view.load(file_arg);
+            view.load(file_arg);
         }
-        self.view.initialize().unwrap();
+        view.initialize();
+
+        Ok(Self {
+            should_quit: false,
+            caret_position: Coordinates::default(),
+            view
+        })
+    }
+
+    pub fn run(&mut self){
 
         // run the text editor
         let result = self.repl();
@@ -48,14 +65,22 @@ impl Editor {
             if self.should_quit {
                 break;
             }
-            let event = read()?;
-            self.evaluate_event(&event)?;
+            match read() {
+                Ok(event) => self.evaluate_event(&event),
+                Err(err) => {
+                    #[cfg(debug_assertions)]
+                    {
+                        panic!("Could not read event: {err:?}")
+                    }
+                }
+            }
+
 
         }
         Ok(())
     }
 
-    fn evaluate_event(&mut self, event: &Event) -> Result<(), Error> {
+    fn evaluate_event(&mut self, event: &Event) {
         match &event {
             Event::Key(KeyEvent {
                 code,
@@ -77,7 +102,7 @@ impl Editor {
                     | KeyCode::End,
                     _
                 ) => {
-                    self.handle_move_caret(*code)?;
+                    self.handle_move_caret(*code);
 
                 }
                 _ => {}
@@ -96,16 +121,15 @@ impl Editor {
             }
             _ => {}
         }
-        Ok(())
     }
 
     fn update_caret_position(&mut self, coordinates: Coordinates) {
         self.caret_position = coordinates;
     }
 
-    fn handle_move_caret(&mut self, key_code: KeyCode) -> Result<(), Error> {
+    fn handle_move_caret(&mut self, key_code: KeyCode) {
         let Coordinates{ mut x, mut y } = self.caret_position;
-        let Coordinates{ x: width, y: height } = Terminal::size()?;
+        let Coordinates{ x: width, y: height } = Terminal::size().unwrap_or_default();
         match key_code {
             KeyCode::Up => {
                 y = y.saturating_sub(1);
@@ -134,23 +158,24 @@ impl Editor {
             _ => (),
         }
         self.update_caret_position(Coordinates { x, y });
-
-        Ok(())
     }
 
     fn refresh_screen(&mut self) -> Result<(), Error> {
-        Terminal::hide_cursor()?;
-        if self.should_quit {
-            Terminal::clear_screen()?;
-            Terminal::move_cursor_to(Coordinates { x: 0, y: 0 })?;
-            Terminal::write("Goodbye.\r\n")?;
-        } else {
-            self.view.render_full()?;
-            Terminal::move_cursor_to(self.caret_position)?;
-        }
+        let _ = Terminal::hide_cursor();
+        self.view.render_full();
+        let _ = Terminal::move_cursor_to(self.caret_position);
         Terminal::show_cursor()?;
         Terminal::flush_queue()?;
         Ok(())
+    }
+}
+
+impl Drop for Editor {
+    fn drop(&mut self) {
+        let _ = Terminal::terminate();
+        if self.should_quit {
+            let _ = Terminal::write("Goodbye\r\n");
+        }
     }
 }
 
